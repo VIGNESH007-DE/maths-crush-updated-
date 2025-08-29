@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Math Crush</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    
+    <!-- TensorFlow and MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.10.0/dist/tf-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.10.0/dist/tf-backend-webgl.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection@1.0.5/dist/face-landmarks-detection.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #fdf2f8; /* Light Pink */
+            --primary-color: #ec4899; /* Pink-500 */
+            --secondary-color: #2563eb; /* Blue-600 */
+            --text-color: #1e293b;
+            --tutor-bg: #fffbeb; /* Light Yellow */
+            --tutor-border: #facc15; /* Yellow-400 */
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+        
+        h1, .font-display {
+            font-family: 'Pacifico', cursive;
+        }
+
+        /* --- Game World --- */
+        #game-world {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #scene {
+            position: relative;
+            width: 90vw;
+            max-width: 600px;
+            height: 400px;
+        }
+
+        .character {
+            position: absolute;
+            bottom: 100px;
+            width: 150px;
+            height: 200px;
+        }
+
+        #boy { left: 20%; }
+        #girl { right: 20%; }
+        
+        .reaction-emoji {
+            position: absolute;
+            top: 50px;
+            right: 15%;
+            font-size: 80px;
+            opacity: 0;
+            transform: scale(0);
+            z-index: 20;
+        }
+        
+        .speech-bubble {
+            position: absolute;
+            width: 200px;
+            padding: 0.75rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            z-index: 15;
+        }
+
+        #boy-speech-bubble {
+            bottom: 220px;
+            left: 20%;
+            background: var(--secondary-color);
+            color: white;
+        }
+        #boy-speech-bubble::after {
+            content: ''; position: absolute; bottom: -10px;
+            left: 30px; width: 0; height: 0;
+            border: 10px solid transparent; border-top-color: var(--secondary-color);
+        }
+
+        #girl-speech-bubble {
+            bottom: 220px;
+            right: 20%;
+            background: var(--primary-color);
+            color: white;
+        }
+        #girl-speech-bubble::after {
+            content: ''; position: absolute; bottom: -10px;
+            right: 30px; width: 0; height: 0;
+            border: 10px solid transparent; border-top-color: var(--primary-color);
+        }
+
+
+        /* --- UI Elements --- */
+        #ui-container {
+            position: fixed;
+            bottom: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 500px;
+            z-index: 20;
+            text-align: center;
+        }
+        
+        #question-display {
+            font-family: 'Roboto', sans-serif;
+            font-size: 1.75rem;
+            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            display: inline-block;
+            border: 2px solid var(--primary-color);
+        }
+
+        #answer-input {
+            font-family: 'Roboto', sans-serif;
+            width: 100%;
+            padding: 0.75rem 1.5rem;
+            border-radius: 50px;
+            border: 2px solid var(--secondary-color);
+            background: #ffffff;
+            color: var(--text-color);
+            font-size: 1.25rem;
+            text-align: center;
+        }
+
+        /* --- Socratic Tutor Panel --- */
+        #socratic-tutor {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translate(120%, -50%);
+            width: 280px;
+            background-color: var(--tutor-bg);
+            border: 3px solid var(--tutor-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            z-index: 50;
+            transition: transform 0.5s ease-in-out;
+        }
+        #socratic-tutor.visible {
+            transform: translate(0, -50%);
+        }
+        #socratic-tutor h3 {
+            font-family: 'Pacifico', cursive;
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
+        #socratic-tutor p {
+            font-size: 1rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+        }
+        #socratic-solution {
+            background-color: #fefce8;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            border-left: 4px solid var(--secondary-color);
+        }
+        #socratic-tutor button {
+             width: 100%; padding: 0.75rem; background: var(--secondary-color);
+             color: white; font-size: 1rem; font-weight: 700;
+             border-radius: 50px; cursor: pointer; transition: all 0.2s; border: none;
+             margin-top: 0.5rem;
+        }
+        #socratic-tutor button:hover {
+            transform: scale(1.05);
+        }
+        #socratic-tutor button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+
+        /* --- Modals --- */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(253, 242, 248, 0.9);
+            backdrop-filter: blur(10px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 100; text-align: center; padding: 2rem;
+            transition: opacity 0.3s;
+        }
+        .modal-content { max-width: 500px; }
+        .modal h1 { font-size: 3.5rem; color: var(--primary-color); margin-bottom: 1rem; }
+        .modal p { font-size: 1.1rem; margin-bottom: 2rem; }
+        .modal-button {
+            display: inline-block; padding: 1rem 2rem; background: var(--primary-color);
+            color: white; font-size: 1.2rem; font-weight: 700;
+            border-radius: 50px; cursor: pointer; transition: transform 0.2s; border: none;
+        }
+        .modal-button:hover { transform: scale(1.05); }
+        .loader {
+            width: 60px; height: 60px; border: 6px solid #fbcfe8;
+            border-top: 6px solid var(--primary-color); border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .hidden { 
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* --- Focus Tracker UI (Now Hidden) --- */
+        #focus-tracker-container {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: -1; /* Pushed to the back */
+            opacity: 0; /* Fully transparent */
+            pointer-events: none; /* Not interactive */
+        }
+        
+        /* --- Refocus Task Modal --- */
+        #refocus-task-modal .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        #refocus-task-modal h2 {
+            font-size: 2rem;
+            color: var(--secondary-color);
+            margin-bottom: 0.5rem;
+        }
+        #refocus-task-modal p {
+            margin-bottom: 1.5rem;
+        }
+        #color-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .color-btn {
+            height: 100px;
+            border-radius: 1rem;
+            cursor: pointer;
+            border: 4px solid transparent;
+            transition: all 0.2s;
+        }
+        .color-btn:hover {
+            transform: scale(1.05);
+        }
+        .color-btn.active {
+            border-color: #000;
+            transform: scale(0.95);
+        }
+        #color-btn-0 { background-color: #3498db; } /* Blue */
+        #color-btn-1 { background-color: #e74c3c; } /* Red */
+        #color-btn-2 { background-color: #f1c40f; } /* Yellow */
+        #color-btn-3 { background-color: #2ecc71; } /* Green */
+    </style>
+</head>
+<body>
+    <!-- Main Game World -->
+    <div id="game-world">
+        <div id="scene">
+            <svg viewBox="0 0 400 150" style="position: absolute; bottom: 0; width: 100%; height: 150px;">
+                <rect x="20" y="50" width="360" height="20" fill="#a16207"/>
+                <rect x="50" y="70" width="20" height="50" fill="#a16207"/>
+                <rect x="330" y="70" width="20" height="50" fill="#a16207"/>
+            </svg>
+            <div id="boy" class="character">
+                <svg viewBox="0 0 150 200"><g stroke="#1e293b" stroke-width="8" stroke-linecap="round"><circle cx="75" cy="40" r="20"/><line x1="75" y1="60" x2="75" y2="130"/><line id="boy-arm-left" x1="75" y1="80" x2="30" y2="110"/><line id="boy-arm-right" x1="75" y1="80" x2="120" y2="110"/><line x1="75" y1="130" x2="45" y2="180"/><line x1="75" y1="130" x2="105" y2="180"/></g></svg>
+            </div>
+            <div id="girl" class="character">
+                <svg viewBox="0 0 150 200"><g stroke="#ec4899" stroke-width="8" stroke-linecap="round"><circle cx="75" cy="40" r="20"/><path d="M55 20 Q75 50, 95 20"/><line x1="75" y1="60" x2="75" y2="130"/><line x1="75" y1="80" x2="30" y2="110"/><line x1="75" y1="80" x2="120" y2="110"/><line x1="75" y1="130" x2="45" y2="180"/><line x1="75" y1="130" x2="105" y2="180"/></g></svg>
+            </div>
+            <div id="reaction-emoji" class="reaction-emoji"></div>
+            <div id="boy-speech-bubble" class="speech-bubble"></div>
+            <div id="girl-speech-bubble" class="speech-bubble"></div>
+        </div>
+    </div>
+
+    <!-- Socratic Tutor Panel -->
+    <div id="socratic-tutor">
+        <h3>Let's think...</h3>
+        <p id="socratic-explanation">Hmm, that's not quite right. Let's break it down together.</p>
+        <div id="socratic-solution" class="hidden"></div>
+        <button id="socratic-hint-btn">Show me how</button>
+        <button id="socratic-continue-btn" class="hidden">Continue</button>
+    </div>
+
+    <!-- Game UI -->
+    <div id="ui-container" class="hidden">
+        <div id="question-display"></div>
+        <form id="answer-form">
+            <input type="text" id="answer-input" placeholder="Your answer...">
+        </form>
+    </div>
+
+    <!-- Focus Tracker UI (Hidden but functional) -->
+    <div id="focus-tracker-container">
+        <div id="video-container">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div id="status" class="bg-gray-200">
+            <span id="status-emoji">⚪</span> <span id="status-text">Ready</span>
+        </div>
+        <div id="log"></div>
+    </div>
+
+    <!-- Game Modals -->
+    <div id="start-screen" class="modal">
+        <div class="modal-content">
+            <h1 class="font-display">Math Crush</h1>
+            <p>Solve math problems to impress your crush! Upload an image to start. The AI will watch your focus in the background!</p>
+            <label for="image-upload" id="upload-button" class="modal-button font-display" style="background-color: #9ca3af; cursor: not-allowed;">Loading AI...</label>
+            <input type="file" id="image-upload" class="hidden" accept="image/*" disabled>
+        </div>
+    </div>
+    
+    <div id="loading-screen" class="modal hidden">
+        <div class="modal-content">
+            <div class="loader" style="margin: 0 auto 1rem;"></div>
+            <p class="font-display">Reading your problems...</p>
+        </div>
+    </div>
+
+    <div id="win-screen" class="modal hidden">
+        <div class="modal-content">
+            <h1 class="font-display" style="color: var(--primary-color);">She said Yes!</h1>
+            <p>You impressed her with your amazing math skills! Congratulations!</p>
+            <button class="play-again-button modal-button font-display">Play Again</button>
+        </div>
+    </div>
+
+    <div id="lose-screen" class="modal hidden">
+        <div class="modal-content">
+            <h1 class="font-display" style="color: #6b7280;">It's a Break Up...</h1>
+            <p>Oh no! The numbers just didn't add up this time. Better luck next time!</p>
+            <button class="play-again-button modal-button font-display">Try Again</button>
+        </div>
+    </div>
+    
+    <!-- Generic Error Modal -->
+    <div id="error-modal" class="modal hidden">
+        <div class="modal-content">
+            <h1 class="font-display" style="color: #ef4444;">Uh Oh!</h1>
+            <p id="error-message">Something went wrong.</p>
+            <button id="error-ok-button" class="modal-button font-display" style="background-color: #6b7280;">Try Again</button>
+        </div>
+    </div>
+
+    <!-- Refocus Task Modal -->
+    <div id="refocus-task-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 class="font-display">Refocus!</h2>
+            <p id="refocus-message">Let's get back on track. Repeat the color pattern!</p>
+            <div id="color-buttons">
+                <div id="color-btn-0" class="color-btn"></div>
+                <div id="color-btn-1" class="color-btn"></div>
+                <div id="color-btn-2" class="color-btn"></div>
+                <div id="color-btn-3" class="color-btn"></div>
+            </div>
+            <p id="refocus-feedback" class="h-6"></p>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const boy = document.getElementById('boy');
+        const girl = document.getElementById('girl');
+        const reactionEmoji = document.getElementById('reaction-emoji');
+        const boySpeechBubble = document.getElementById('boy-speech-bubble');
+        const girlSpeechBubble = document.getElementById('girl-speech-bubble');
+        const uiContainer = document.getElementById('ui-container');
+        const questionDisplay = document.getElementById('question-display');
+        const answerForm = document.getElementById('answer-form');
+        const answerInput = document.getElementById('answer-input');
+        const imageUpload = document.getElementById('image-upload');
+        const uploadButton = document.getElementById('upload-button');
+        const startScreen = document.getElementById('start-screen');
+        const loadingScreen = document.getElementById('loading-screen');
+        const winScreen = document.getElementById('win-screen');
+        const loseScreen = document.getElementById('lose-screen');
+        const playAgainButtons = document.querySelectorAll('.play-again-button');
+        const refocusTaskModal = document.getElementById('refocus-task-modal');
+        const colorButtons = document.getElementById('color-buttons');
+        const refocusFeedback = document.getElementById('refocus-feedback');
+        const errorModal = document.getElementById('error-modal');
+        const errorMessage = document.getElementById('error-message');
+        const errorOkButton = document.getElementById('error-ok-button');
+        const socraticTutor = document.getElementById('socratic-tutor');
+        const socraticExplanation = document.getElementById('socratic-explanation');
+        const socraticSolution = document.getElementById('socratic-solution');
+        const socraticHintBtn = document.getElementById('socratic-hint-btn');
+        const socraticContinueBtn = document.getElementById('socratic-continue-btn');
+
+        // Focus Tracker DOM Elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- Game State ---
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let hearts = 0;
+        let blocks = 0;
+        let isGamePaused = false;
+        const flirtyLines = [
+            "Are you a 90-degree angle? You're looking right!", "My love for you is like pi... never-ending.",
+            "You're sweeter than 3.14.", "Are we parallel lines? It feels like we were meant to meet.",
+            "I think you're acutely angled... a real cutie!", "You must be the square root of 2, because I feel irrational around you.",
+            "You and I would add up better than a calculator.", "My love for you is like a fractal... it goes on forever.",
+            "You're the solution to my every equation."
+        ];
+
+        // --- Focus Tracker State ---
+        let detector, stream, animationFrameId;
+        let isTracking = false;
+        let distractionStartTime = null;
+        let yawnStartTime = null;
+        const DISTRACTION_THRESHOLD_SECONDS = 5;
+        const YAWN_THRESHOLD_SECONDS = 1.5;
+        const YAWN_MAR_THRESHOLD = 0.6;
+
+        // --- Refocus Task State ---
+        let sequence = [];
+        let playerSequence = [];
+        let canPlayerClick = false;
+        const buttonSynths = [
+            new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, release: 0.2 } }).toDestination(),
+            new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, release: 0.2 } }).toDestination(),
+            new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, release: 0.2 } }).toDestination(),
+            new Tone.Synth({ oscillator: { type: 'triangle' }, envelope: { attack: 0.01, release: 0.2 } }).toDestination(),
+        ];
+        const buttonNotes = ["C4", "E4", "G4", "C5"];
+
+
+        // --- Sound Engine ---
+        const correctSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).toDestination();
+        const wrongSynth = new Tone.Synth({ oscillator: { type: 'sawtooth' } }).toDestination();
+        function playSound(type) {
+            Tone.start().then(() => {
+                if (type === 'correct') {
+                    correctSynth.triggerAttackRelease("C5", "8n");
+                } else if (type === 'wrong') {
+                    wrongSynth.triggerAttackRelease("C3", "8n");
+                }
+            });
+        }
+
+        // --- Gemini API Calls ---
+        async function callGeminiApi(payload, retries = 3, delay = 1000) {
+            const apiKey = ""; // API key is managed by the environment, leave empty.
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(apiUrl, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(payload) 
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
+                         return result.candidates[0].content.parts[0].text;
+                    } else {
+                        throw new Error("Invalid response structure from API.");
+                    }
+                } catch (error) {
+                    console.error(`API call attempt ${i + 1} failed:`, error);
+                    if (i === retries - 1) throw error; 
+                    await new Promise(res => setTimeout(res, delay * Math.pow(2, i))); 
+                }
+            }
+        }
+
+        async function extractQuestionsFromImage(imageBase64) {
+            const systemPrompt = `Analyze the image. Extract all simple math problems. Output MUST be a valid JSON array of strings. Example: ["1+1", "2*3", ...].`;
+            const payload = {
+                contents: [{ parts: [
+                    { text: "Extract math problems as a JSON array." },
+                    { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
+                ]}],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+            try {
+                const text = await callGeminiApi(payload);
+                const jsonString = text.substring(text.indexOf('['), text.lastIndexOf(']') + 1);
+                return JSON.parse(jsonString);
+            } catch (error) {
+                console.error("Error extracting questions:", error);
+                showErrorModal("Sorry, I couldn't read the problems from that image. Please try another one.");
+                return null;
+            }
+        }
+        
+        async function getSocraticExplanation(problem) {
+            const systemPrompt = `You are a friendly, encouraging math tutor for a kid's game. For the given simple math problem, provide a short, step-by-step explanation using the Socratic method. Ask a leading question to guide the user. Keep it under 3 sentences and be very simple. Do not state the final answer. For example, for '7 x 3', you could say 'That's a tricky one! How about we think of it as adding 7 three times? What is 7 + 7?'`;
+            const payload = {
+                contents: [{ parts: [{ text: `Explain this problem: ${problem}` }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+            try {
+                return await callGeminiApi(payload);
+            } catch (error) {
+                console.error("Error getting Socratic explanation:", error);
+                return "Let's try breaking the problem down into smaller pieces!"; 
+            }
+        }
+
+        async function getSolutionExplanation(problem) {
+            const systemPrompt = `You are a math teacher. Provide a clear, step-by-step explanation for how to solve the simple math problem '${problem}'. State the final answer clearly at the end. For example, for '7 x 3', explain 'First, you take the number 7. Then, you add it together 3 times. So, 7 + 7 is 14. Then, 14 + 7 is 21. The final answer is 21.'`;
+             const payload = {
+                contents: [{ parts: [{ text: `Solve this problem: ${problem}` }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+            try {
+                return await callGeminiApi(payload);
+            } catch (error) {
+                console.error("Error getting solution:", error);
+                return "There was an error getting the solution, but let's move on!";
+            }
+        }
+
+        // --- Animations & UI ---
+        function showReaction(type) {
+            const emoji = type === 'correct' ? '❤️' : '🚫';
+            reactionEmoji.textContent = emoji;
+            gsap.fromTo(reactionEmoji, { scale: 0, opacity: 0, y: 20 }, { scale: 1, opacity: 1, y: 0, duration: 0.5, ease: 'back.out(1.7)' });
+            if (type === 'correct') {
+                const line = flirtyLines[currentQuestionIndex % flirtyLines.length];
+                boySpeechBubble.textContent = line;
+                gsap.fromTo(boySpeechBubble, { opacity: 0, y: 20, scale: 0.5 }, { opacity: 1, y: -10, scale: 1, duration: 0.4, ease: 'power2.out' });
+                gsap.to(boy, { rotation: -10, y: -10, transformOrigin: 'bottom center', duration: 0.3, ease: 'power2.out', yoyo: true, repeat: 1 });
+            } else {
+                girlSpeechBubble.textContent = "Hmm, not quite...";
+                gsap.fromTo(girlSpeechBubble, { opacity: 0, y: 20, scale: 0.5 }, { opacity: 1, y: -10, scale: 1, duration: 0.4, ease: 'power2.out' });
+                gsap.to(boy, { rotation: 0, y: 20, transformOrigin: 'bottom center', duration: 0.5, ease: 'bounce.out' });
+            }
+        }
+        function hideReaction() {
+            gsap.to([reactionEmoji, boySpeechBubble, girlSpeechBubble], { opacity: 0, y: 20, duration: 0.3, ease: 'power2.in' });
+            gsap.to(boy, { rotation: 0, y: 0, duration: 0.5, ease: 'elastic.out(1, 0.3)' });
+        }
+        
+        function showErrorModal(message) {
+            errorMessage.textContent = message;
+            errorModal.classList.remove('hidden');
+        }
+
+        // --- Core Machine Learning Logic ---
+        async function loadModel() {
+            console.log("Loading AI model...");
+            const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+            const detectorConfig = {
+                runtime: 'mediapipe',
+                solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619',
+                maxFaces: 1,
+            };
+            detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+            console.log("✅ AI Ready!");
+            uploadButton.textContent = "Upload Problems";
+            uploadButton.style.backgroundColor = 'var(--primary-color)';
+            uploadButton.style.cursor = 'pointer';
+            imageUpload.disabled = false;
+        }
+
+        async function startTracking() {
+            if (!detector) return;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 }, audio: false });
+                video.srcObject = stream;
+                await new Promise((resolve) => { video.onloadedmetadata = () => { video.play(); resolve(); }; });
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                isTracking = true;
+                console.log("Focus tracking started.");
+                detectFace();
+            } catch (err) {
+                console.error("Error accessing webcam:", err);
+            }
+        }
+
+        function stopTracking() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            isTracking = false;
+            cancelAnimationFrame(animationFrameId);
+            if(ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+            console.log("Focus tracking stopped.");
+        }
+
+        async function detectFace() {
+            if (!isTracking || isGamePaused) {
+                animationFrameId = requestAnimationFrame(detectFace);
+                return;
+            };
+            const faces = await detector.estimateFaces(video, {flipHorizontal: false});
+            if (faces.length > 0) {
+                const keypoints = faces[0].keypoints;
+                analyzePose(keypoints);
+                analyzeYawn(keypoints);
+            } else {
+                handleDistraction();
+            }
+            animationFrameId = requestAnimationFrame(detectFace);
+        }
+
+        // --- Analysis Functions ---
+        function analyzePose(keypoints) {
+            const leftEye = keypoints[33];
+            const rightEye = keypoints[263];
+            const nose = keypoints[1];
+            const yawRatio = Math.abs(nose.x - leftEye.x) / Math.abs(nose.x - rightEye.x);
+            if (yawRatio > 1.8 || yawRatio < 0.5) {
+                handleDistraction();
+            } else {
+                handleFocus();
+            }
+        }
+        function analyzeYawn(keypoints) {
+            const upperLipTop = keypoints[13];
+            const lowerLipBottom = keypoints[14];
+            const mouthCornerLeft = keypoints[61];
+            const mouthCornerRight = keypoints[291];
+            const verticalDist = Math.hypot(upperLipTop.x - lowerLipBottom.x, upperLipTop.y - lowerLipBottom.y);
+            const horizontalDist = Math.hypot(mouthCornerLeft.x - mouthCornerRight.x, mouthCornerLeft.y - mouthCornerRight.y);
+            const mar = verticalDist / horizontalDist;
+            if (mar > YAWN_MAR_THRESHOLD) {
+                if (!yawnStartTime) {
+                    yawnStartTime = new Date();
+                } else {
+                    if ((new Date() - yawnStartTime) / 1000 >= YAWN_THRESHOLD_SECONDS) {
+                        console.log("💤 Possible yawn detected.");
+                        launchRefocusTask();
+                        yawnStartTime = null;
+                    }
+                }
+            } else {
+                yawnStartTime = null;
+            }
+        }
+        function handleDistraction() {
+            if (!distractionStartTime) {
+                distractionStartTime = new Date();
+            } else {
+                const secondsDistracted = (new Date() - distractionStartTime) / 1000;
+                if (secondsDistracted >= DISTRACTION_THRESHOLD_SECONDS) {
+                    console.log("👀 Looked away. Time to refocus!");
+                    launchRefocusTask();
+                    distractionStartTime = null;
+                }
+            }
+        }
+        function handleFocus() {
+            distractionStartTime = null;
+        }
+
+        // --- Refocus Task Logic ---
+        function launchRefocusTask() {
+            if (isGamePaused) return; 
+            isGamePaused = true;
+            refocusTaskModal.classList.remove('hidden');
+            refocusFeedback.textContent = '';
+            sequence = [];
+            playerSequence = [];
+            
+            for(let i=0; i<3; i++) {
+                sequence.push(Math.floor(Math.random() * 4));
+            }
+            
+            playSequence();
+        }
+
+        async function playSequence() {
+            canPlayerClick = false;
+            await new Promise(resolve => setTimeout(resolve, 500));
+            for(const colorIndex of sequence) {
+                const button = document.getElementById(`color-btn-${colorIndex}`);
+                button.classList.add('active');
+                buttonSynths[colorIndex].triggerAttackRelease(buttonNotes[colorIndex], "8n");
+                await new Promise(resolve => setTimeout(resolve, 500));
+                button.classList.remove('active');
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            canPlayerClick = true;
+            playerSequence = [];
+        }
+
+        function handleColorClick(index) {
+            if (!canPlayerClick) return;
+            
+            const button = document.getElementById(`color-btn-${index}`);
+            button.classList.add('active');
+            buttonSynths[index].triggerAttackRelease(buttonNotes[index], "8n");
+            setTimeout(()=> button.classList.remove('active'), 200);
+
+            playerSequence.push(index);
+
+            if (playerSequence[playerSequence.length - 1] !== sequence[playerSequence.length - 1]) {
+                refocusFeedback.textContent = "Oops! Let's try that sequence again.";
+                refocusFeedback.style.color = '#e74c3c';
+                playSound('wrong');
+                playSequence();
+                return;
+            }
+
+            if (playerSequence.length === sequence.length) {
+                refocusFeedback.textContent = "Great job! Focus restored!";
+                refocusFeedback.style.color = '#2ecc71';
+                playSound('correct');
+                setTimeout(endRefocusTask, 1000);
+            }
+        }
+        
+        function endRefocusTask() {
+            refocusTaskModal.classList.add('hidden');
+            isGamePaused = false;
+        }
+
+        // --- Game Flow ---
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            startScreen.classList.add('hidden');
+            loadingScreen.classList.remove('hidden');
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64Data = reader.result.split(',')[1];
+                const extractedQuestions = await extractQuestionsFromImage(base64Data);
+                loadingScreen.classList.add('hidden');
+                if (extractedQuestions && extractedQuestions.length > 0) {
+                    questions = extractedQuestions;
+                    startGame();
+                } else {
+                    startScreen.classList.remove('hidden');
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function startGame() {
+            currentQuestionIndex = 0;
+            hearts = 0;
+            blocks = 0;
+            uiContainer.classList.remove('hidden');
+            startTracking();
+            displayQuestion();
+        }
+
+        function displayQuestion() {
+            if (currentQuestionIndex >= questions.length) {
+                endGame();
+                return;
+            }
+            questionDisplay.textContent = `${questions[currentQuestionIndex]} = ?`;
+            answerInput.value = '';
+            answerInput.focus();
+        }
+
+        function handleAnswerSubmit(e) {
+            e.preventDefault();
+            if (isGamePaused) return;
+            const userAnswer = answerInput.value.trim();
+            if (userAnswer === '') return;
+            
+            let correctAnswer;
+            try {
+                correctAnswer = new Function('return ' + questions[currentQuestionIndex].replace(/x/gi, '*').replace('÷', '/'))();
+            } catch {
+                handleReactionLogic('wrong'); return;
+            }
+            
+            if (parseFloat(userAnswer) === correctAnswer) {
+                handleReactionLogic('correct');
+            } else {
+                handleReactionLogic('wrong');
+            }
+        }
+
+        async function handleReactionLogic(type) {
+            playSound(type);
+            showReaction(type);
+            answerForm.classList.add('hidden');
+            
+            if (type === 'correct') {
+                hearts++;
+                setTimeout(() => {
+                    hideReaction();
+                    answerForm.classList.remove('hidden');
+                    currentQuestionIndex++;
+                    displayQuestion();
+                }, 2500);
+            } else {
+                blocks++;
+                isGamePaused = true; // Pause the game for the tutor
+                const explanation = await getSocraticExplanation(questions[currentQuestionIndex]);
+                socraticExplanation.textContent = explanation;
+                socraticSolution.classList.add('hidden');
+                socraticHintBtn.classList.remove('hidden');
+                socraticHintBtn.disabled = false;
+                socraticHintBtn.textContent = "Show me how";
+                socraticContinueBtn.classList.add('hidden');
+                socraticTutor.classList.add('visible');
+            }
+        }
+        
+        async function showSolution() {
+            socraticHintBtn.disabled = true;
+            socraticHintBtn.textContent = "Thinking...";
+            const solutionText = await getSolutionExplanation(questions[currentQuestionIndex]);
+            socraticSolution.innerHTML = solutionText.replace(/\n/g, '<br>'); // Format solution
+            socraticSolution.classList.remove('hidden');
+            socraticHintBtn.classList.add('hidden');
+            socraticContinueBtn.classList.remove('hidden');
+        }
+
+        function continueAfterTutor() {
+            socraticTutor.classList.remove('visible');
+            
+            // Show the new "not handsome" message
+            girlSpeechBubble.textContent = "You are not handsome, try harder.";
+            gsap.fromTo(girlSpeechBubble, { opacity: 0, y: 20, scale: 0.5 }, { opacity: 1, y: -10, scale: 1, duration: 0.4, ease: 'power2.out' });
+
+            setTimeout(() => {
+                isGamePaused = false;
+                hideReaction(); // This will also hide the girl's speech bubble
+                answerForm.classList.remove('hidden');
+                currentQuestionIndex++;
+                displayQuestion();
+            }, 2500); // Wait for the message to be visible for a bit
+        }
+
+        function endGame() {
+            uiContainer.classList.add('hidden');
+            stopTracking();
+            if (hearts > blocks) {
+                winScreen.classList.remove('hidden');
+            } else {
+                loseScreen.classList.remove('hidden');
+            }
+        }
+
+        // --- Event Listeners ---
+        imageUpload.addEventListener('change', handleImageUpload);
+        answerForm.addEventListener('submit', handleAnswerSubmit);
+        playAgainButtons.forEach(button => {
+            button.addEventListener('click', () => location.reload());
+        });
+        document.querySelectorAll('.color-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => handleColorClick(index));
+        });
+        errorOkButton.addEventListener('click', () => location.reload());
+        socraticHintBtn.addEventListener('click', showSolution);
+        socraticContinueBtn.addEventListener('click', continueAfterTutor);
+
+        window.addEventListener('load', () => {
+            loadModel().catch(err => {
+                console.error(err);
+                showErrorModal("The core AI model failed to load. Please refresh the page to try again.");
+                uploadButton.textContent = "Error Loading AI";
+            });
+        });
+    </script>
+</body>
+</html>
