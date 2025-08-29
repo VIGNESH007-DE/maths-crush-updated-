@@ -154,7 +154,8 @@
             top: 50%;
             right: 20px;
             transform: translate(120%, -50%);
-            width: 280px;
+            width: 90vw;
+            max-width: 320px; /* Increased width */
             background-color: var(--tutor-bg);
             border: 3px solid var(--tutor-border);
             border-radius: 16px;
@@ -162,6 +163,8 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             z-index: 50;
             transition: transform 0.5s ease-in-out;
+            max-height: 80vh; /* Added max-height */
+            overflow-y: auto; /* Added for scrolling if content overflows */
         }
         #socratic-tutor.visible {
             transform: translate(0, -50%);
@@ -184,6 +187,7 @@
             padding: 0.75rem;
             margin-top: 1rem;
             border-left: 4px solid var(--secondary-color);
+            text-align: left; /* Align solution text left */
         }
         #socratic-tutor button {
              width: 100%; padding: 0.75rem; background: var(--secondary-color);
@@ -535,7 +539,7 @@
         }
 
         async function getSolutionExplanation(problem) {
-            const systemPrompt = `You are a math teacher. Provide a clear, step-by-step explanation for how to solve the simple math problem '${problem}'. State the final answer clearly at the end. For example, for '7 x 3', explain 'First, you take the number 7. Then, you add it together 3 times. So, 7 + 7 is 14. Then, 14 + 7 is 21. The final answer is 21.'`;
+            const systemPrompt = `You are a math teacher. Provide a concise, step-by-step explanation for how to solve the simple math problem '${problem}'. Use a numbered list format (e.g., "1. First do this.\\n2. Then do that."). State the final answer clearly at the end.`;
              const payload = {
                 contents: [{ parts: [{ text: `Solve this problem: ${problem}` }] }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
@@ -836,7 +840,12 @@
             socraticHintBtn.disabled = true;
             socraticHintBtn.textContent = "Thinking...";
             const solutionText = await getSolutionExplanation(questions[currentQuestionIndex]);
-            socraticSolution.innerHTML = solutionText.replace(/\n/g, '<br>'); // Format solution
+            
+            // Format the solution into a clean ordered list
+            const steps = solutionText.split('\n').filter(step => step.trim() !== '');
+            const stepsHtml = '<ol class="list-decimal list-inside space-y-1">' + steps.map(step => `<li>${step.replace(/^\d+\.\s*/, '')}</li>`).join('') + '</ol>';
+            socraticSolution.innerHTML = stepsHtml;
+
             socraticSolution.classList.remove('hidden');
             socraticHintBtn.classList.add('hidden');
             socraticContinueBtn.classList.remove('hidden');
